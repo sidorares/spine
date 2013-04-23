@@ -1,148 +1,158 @@
-Spine = @Spine or require('spine')
-$     = Spine.$
+# UMD
+((root, factory) ->
+  if typeof exports is 'object'
+    module.exports = factory require 'Spine'
+  else if typeof define is 'function' and define.amd
+    define ['Spine'], factory
+  else
+    factory root.Spine
+) this, (Spine) ->
 
-hashStrip    = /^#*/
-namedParam   = /:([\w\d]+)/g
-splatParam   = /\*([\w\d]+)/g
-escapeRegExp = /[-[\]{}()+?.,\\^$|#\s]/g
 
-class Spine.Route extends Spine.Module
-  @extend Spine.Events
+  $ = Spine.$
 
-  @historySupport: window.history?.pushState?
+  hashStrip    = /^#*/
+  namedParam   = /:([\w\d]+)/g
+  splatParam   = /\*([\w\d]+)/g
+  escapeRegExp = /[-[\]{}()+?.,\\^$|#\s]/g
 
-  @routes: []
+  class Spine.Route extends Spine.Module
+    @extend Spine.Events
 
-  @options:
-    trigger: true
-    history: false
-    shim: false
-    replace: false
+    @historySupport: window.history?.pushState?
 
-  @add: (path, callback) ->
-    if (typeof path is 'object' and path not instanceof RegExp)
-      @add(key, value) for key, value of path
-    else
-      @routes.push(new @(path, callback))
+    @routes: []
 
-  @setup: (options = {}) ->
-    @options = $.extend({}, @options, options)
+    @options:
+      trigger: true
+      history: false
+      shim: false
+      replace: false
 
-    if (@options.history)
-      @history = @historySupport and @options.history
+    @add: (path, callback) ->
+      if (typeof path is 'object' and path not instanceof RegExp)
+        @add(key, value) for key, value of path
+      else
+        @routes.push(new @(path, callback))
 
-    return if @options.shim
+    @setup: (options = {}) ->
+      @options = $.extend({}, @options, options)
 
-    if @history
-      $(window).bind('popstate', @change)
-    else
-      $(window).bind('hashchange', @change)
-    @change()
+      if (@options.history)
+        @history = @historySupport and @options.history
 
-  @unbind: ->
-    return if @options.shim
+      return if @options.shim
 
-    if @history
-      $(window).unbind('popstate', @change)
-    else
-      $(window).unbind('hashchange', @change)
+      if @history
+        $(window).bind('popstate', @change)
+      else
+        $(window).bind('hashchange', @change)
+      @change()
 
-  @navigate: (args...) ->
-    options = {}
+    @unbind: ->
+      return if @options.shim
 
-    lastArg = args[args.length - 1]
-    if typeof lastArg is 'object'
-      options = args.pop()
-    else if typeof lastArg is 'boolean'
-      options.trigger = args.pop()
+      if @history
+        $(window).unbind('popstate', @change)
+      else
+        $(window).unbind('hashchange', @change)
 
-    options = $.extend({}, @options, options)
+    @navigate: (args...) ->
+      options = {}
 
-    path = args.join('/')
-    return if @path is path
-    @path = path
+      lastArg = args[args.length - 1]
+      if typeof lastArg is 'object'
+        options = args.pop()
+      else if typeof lastArg is 'boolean'
+        options.trigger = args.pop()
 
-    @trigger('navigate', @path)
+      options = $.extend({}, @options, options)
 
-    @matchRoute(@path, options) if options.trigger
+      path = args.join('/')
+      return if @path is path
+      @path = path
 
-    return if options.shim
+      @trigger('navigate', @path)
 
-    if @history and options.replace
-      history.replaceState({}, document.title, @path)
-    else if @history
-      history.pushState({}, document.title, @path)
-    else
-      window.location.hash = @path
+      @matchRoute(@path, options) if options.trigger
 
-  # Private
+      return if options.shim
 
-  @getPath: ->
-    if @history
-      path = window.location.pathname
-      path = '/' + path if path.substr(0,1) isnt '/'
-    else
-      path = window.location.hash
-      path = path.replace(hashStrip, '')
-    path
+      if @history and options.replace
+        history.replaceState({}, document.title, @path)
+      else if @history
+        history.pushState({}, document.title, @path)
+      else
+        window.location.hash = @path
 
-  @getHost: ->
-    "#{window.location.protocol}//#{window.location.host}"
+    # Private
 
-  @change: ->
-    path = @getPath()
-    return if path is @path
-    @path = path
-    @matchRoute(@path)
+    @getPath: ->
+      if @history
+        path = window.location.pathname
+        path = '/' + path if path.substr(0,1) isnt '/'
+      else
+        path = window.location.hash
+        path = path.replace(hashStrip, '')
+      path
 
-  @matchRoute: (path, options) ->
-    for route in @routes when route.match(path, options)
-      @trigger('change', route, path)
-      return route
+    @getHost: ->
+      "#{window.location.protocol}//#{window.location.host}"
 
-  constructor: (@path, @callback) ->
-    @names = []
+    @change: ->
+      path = @getPath()
+      return if path is @path
+      @path = path
+      @matchRoute(@path)
 
-    if typeof path is 'string'
-      namedParam.lastIndex = 0
-      while (match = namedParam.exec(path)) != null
-        @names.push(match[1])
+    @matchRoute: (path, options) ->
+      for route in @routes when route.match(path, options)
+        @trigger('change', route, path)
+        return route
 
-      splatParam.lastIndex = 0
-      while (match = splatParam.exec(path)) != null
-        @names.push(match[1])
+    constructor: (@path, @callback) ->
+      @names = []
 
-      path = path.replace(escapeRegExp, '\\$&')
-                 .replace(namedParam, '([^\/]*)')
-                 .replace(splatParam, '(.*?)')
+      if typeof path is 'string'
+        namedParam.lastIndex = 0
+        while (match = namedParam.exec(path)) != null
+          @names.push(match[1])
 
-      @route = new RegExp("^#{path}$")
-    else
-      @route = path
+        splatParam.lastIndex = 0
+        while (match = splatParam.exec(path)) != null
+          @names.push(match[1])
 
-  match: (path, options = {}) ->
-    match = @route.exec(path)
-    return false unless match
-    options.match = match
-    params = match.slice(1)
+        path = path.replace(escapeRegExp, '\\$&')
+                   .replace(namedParam, '([^\/]*)')
+                   .replace(splatParam, '(.*?)')
 
-    if @names.length
-      for param, i in params
-        options[@names[i]] = param
+        @route = new RegExp("^#{path}$")
+      else
+        @route = path
 
-    @callback.call(null, options) isnt false
+    match: (path, options = {}) ->
+      match = @route.exec(path)
+      return false unless match
+      options.match = match
+      params = match.slice(1)
 
-# Coffee-script bug
-Spine.Route.change = Spine.Route.proxy(Spine.Route.change)
+      if @names.length
+        for param, i in params
+          options[@names[i]] = param
 
-Spine.Controller.include
-  route: (path, callback) ->
-    Spine.Route.add(path, @proxy(callback))
+      @callback.call(null, options) isnt false
 
-  routes: (routes) ->
-    @route(key, value) for key, value of routes
+  # Coffee-script bug
+  Spine.Route.change = Spine.Route.proxy(Spine.Route.change)
 
-  navigate: ->
-    Spine.Route.navigate.apply(Spine.Route, arguments)
+  Spine.Controller.include
+    route: (path, callback) ->
+      Spine.Route.add(path, @proxy(callback))
 
-module?.exports = Spine.Route
+    routes: (routes) ->
+      @route(key, value) for key, value of routes
+
+    navigate: ->
+      Spine.Route.navigate.apply(Spine.Route, arguments)
+
+  Spine.Route
